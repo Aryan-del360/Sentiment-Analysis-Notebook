@@ -74,19 +74,18 @@ def load_and_analyze_data(file_path):
         st.error(f"Error loading dataset: {e}")
         st.stop()
 
-    # --- IMPORTANT ---
-    # Make sure 'Sentence' below matches the actual column name in your Dataset-SA.csv
-    # If your text column is named 'review_text', change df['Sentence'] to df['review_text']
-    if 'Sentence' not in df.columns:
-        st.error("Error: 'Sentence' column not found in your CSV. Please check your dataset or update the column name in app.py.")
+    # --- IMPORTANT CORRECTION ---
+    # The text column in Dataset-SA.csv is 'Review' as per your README.md
+    if 'Review' not in df.columns:
+        st.error("Error: 'Review' column not found in your CSV. Please check your dataset or update the column name in app.py if it's different.")
         st.stop()
 
-    # Apply sentiment analysis
-    df['Sentiment_TextBlob'] = df['Sentence'].apply(get_textblob_sentiment)
-    df['Sentiment_VADER'] = df['Sentence'].apply(get_vader_sentiment)
+    # Apply sentiment analysis to the 'Review' column
+    df['Sentiment_TextBlob'] = df['Review'].apply(get_textblob_sentiment)
+    df['Sentiment_VADER'] = df['Review'].apply(get_vader_sentiment)
 
     # For a more detailed breakdown, could also store scores
-    df['VADER_Compound'] = df['Sentence'].apply(lambda x: analyzer.polarity_scores(x)['compound'] if isinstance(x, str) else 0)
+    df['VADER_Compound'] = df['Review'].apply(lambda x: analyzer.polarity_scores(x)['compound'] if isinstance(x, str) else 0)
 
     return df
 
@@ -136,7 +135,7 @@ else:
 
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric(label="Total Sentences Analyzed", value=f"{len(df):,.0f} 📝")
+        st.metric(label="Total Reviews Analyzed", value=f"{len(df):,.0f} 📝")
     with col2:
         st.metric(label="Reviews Matching Filters", value=f"{len(filtered_df):,.0f} ✅")
     with col3:
