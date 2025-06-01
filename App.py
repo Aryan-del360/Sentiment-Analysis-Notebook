@@ -7,7 +7,15 @@ from textblob import TextBlob
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 import nltk # Ensure nltk is imported
 
-# --- NLTK Data Download (More Robust Approach for Deployment) ---
+# --- Configuration & Setup (MUST be the absolute first Streamlit command) ---
+st.set_page_config(
+    page_title="Product Sentiment Explorer 🛍️",
+    page_icon="📈",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# --- NLTK Data Download (Now defined/called AFTER st.set_page_config) ---
 # Use st.cache_resource to download NLTK data only once per deployment/session
 @st.cache_resource
 def download_nltk_vader():
@@ -22,23 +30,6 @@ def download_nltk_vader():
 
 # Call the function to ensure data is downloaded and analyzer is ready
 analyzer = download_nltk_vader()
-
-# --- Configuration & Setup ---
-st.set_page_config(
-    page_title="Product Sentiment Explorer 🛍️",
-    page_icon="📈",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
-
-# Set up matplotlib style for a cleaner look
-plt.style.use('seaborn-v0_8-darkgrid')
-plt.rcParams['figure.figsize'] = (10, 6)
-plt.rcParams['axes.labelsize'] = 12
-plt.rcParams['axes.titlesize'] = 14
-plt.rcParams['xtick.labelsize'] = 10
-plt.rcParams['ytick.labelsize'] = 10
-plt.rcParams['legend.fontsize'] = 10
 
 # --- Sentiment Analysis Functions ---
 def get_textblob_sentiment(text):
