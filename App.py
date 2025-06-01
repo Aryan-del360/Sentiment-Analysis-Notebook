@@ -187,7 +187,7 @@ else:
                 colors=[colors[label] for label in textblob_counts.index])
         ax2.set_title('TextBlob Sentiment Share')
         st.pyplot(fig2)
-    
+
     st.markdown("""
     **Key Takeaways from Sentiment Distribution:**
     * **Overall Mood:** Get a quick feel for the dominant sentiment within the selected product(s).
@@ -199,11 +199,11 @@ else:
     if selected_product == 'All Products' and len(filtered_df['product_name'].unique()) > 1:
         st.markdown("---")
         st.header("📦 Sentiment Breakdown Per Product (VADER)")
-        
+
         # Calculate positive sentiment percentage per product
         product_sentiment_vader = filtered_df.groupby('product_name')['Sentiment_VADER'].value_counts(normalize=True).unstack(fill_value=0)
         product_positive_percentage = product_sentiment_vader.get('Positive', pd.Series(dtype=float)) * 100
-        
+
         # Filter out products with 0 positive reviews or no data, then sort
         product_positive_percentage = product_positive_percentage[product_positive_percentage > 0].sort_values(ascending=False)
 
@@ -236,10 +236,10 @@ else:
     if st.button("Get Sentiment Spark!"):
         if user_text:
             st.subheader("Your Text's Sentiment:")
-            
+
             # TextBlob Analysis
             textblob_result = get_textblob_sentiment(user_text)
-            
+
             # VADER Analysis
             vader_scores = analyzer.polarity_scores(user_text)
             vader_result = get_vader_sentiment(user_text)
@@ -248,7 +248,7 @@ else:
             st.markdown(f"**TextBlob Prediction:** <span style='background-color:#ADD8E6; padding: 5px 10px; border-radius: 5px;'>**{textblob_result}**</span>", unsafe_allow_html=True)
             st.markdown(f"**VADER Prediction:** <span style='background-color:#90EE90; padding: 5px 10px; border-radius: 5px;'>**{vader_result}**</span>", unsafe_allow_html=True)
             st.markdown(f"**VADER Polarity Scores:** (Negative: {vader_scores['neg']:.2f}, Neutral: {vader_scores['neu']:.2f}, Positive: {vader_scores['pos']:.2f}, Compound: {vader_scores['compound']:.2f})")
-            
+
             st.markdown("""
             * **TextBlob Polarity:** Ranges from -1 (most negative) to +1 (most positive).
             * **VADER Compound Score:** A normalized, weighted composite score, typically between -1 (most extreme negative) and +1 (most extreme positive).
