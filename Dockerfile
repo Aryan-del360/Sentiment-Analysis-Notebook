@@ -10,7 +10,7 @@ COPY requirements.txt .
 # Install any needed packages specified in requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Download NLTK data (vader_lexicon)
+# Download NLTK data
 # This is crucial for 'vader_lexicon' to be available in the container
 RUN python -m nltk.downloader vader_lexicon
 
@@ -21,5 +21,6 @@ COPY . .
 EXPOSE 8501
 
 # Define the command to run your Streamlit app
-# IMPORTANT: Ensure 'App.py' matches the name of your main Streamlit script
+# --server.port sets the port to 8501 (as exposed above)
+# --server.enableCORS false and --server.enableXsrfProtection false are often needed for Cloud Run
 CMD ["streamlit", "run", "App.py", "--server.port=8501", "--server.enableCORS=false", "--server.enableXsrfProtection=false"]
