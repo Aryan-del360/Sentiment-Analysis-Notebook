@@ -3,20 +3,32 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from datetime import datetime
+from textblob import TextBlob
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
+import nltk
+
+# --- NLTK Data Download (Crucial for Deployment) ---
+# Ensure VADER lexicon is available. In Dockerfile, you already have:
+# RUN python -m nltk.downloader vader_lexicon
+# For local testing, you might need to uncomment and run this once:
+# try:
+#     nltk.data.find('sentiment/vader_lexicon.zip')
+# except nltk.downloader.DownloadError:
+#     nltk.download('vader_lexicon')
+
+# Initialize VADER sentiment analyzer
+analyzer = SentimentIntensityAnalyzer()
 
 # --- Configuration & Setup ---
-# 1. Page Config: Modern, Wide Layout, Initial Sidebar State
 st.set_page_config(
-    page_title="Product Trend Analyzer 🚀",
-    page_icon="📈",
-    layout="wide", # Use 'wide' layout for more space
-    initial_sidebar_state="expanded" # Keep sidebar open by default
+    page_title="Sentiment Spark ✨",
+    page_icon="😊",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 # Set up matplotlib style for a cleaner look
-plt.style.use('seaborn-v0_8-darkgrid') # Or 'ggplot', 'fivethirtyeight'
-# Adjust plot defaults for better aesthetics
+plt.style.use('seaborn-v0_8-darkgrid')
 plt.rcParams['figure.figsize'] = (10, 6)
 plt.rcParams['axes.labelsize'] = 12
 plt.rcParams['axes.titlesize'] = 14
@@ -24,183 +36,191 @@ plt.rcParams['xtick.labelsize'] = 10
 plt.rcParams['ytick.labelsize'] = 10
 plt.rcParams['legend.fontsize'] = 10
 
-# --- Helper Functions ---
-@st.cache_data # Cache data loading to improve performance
-def load_and_process_data():
-    """Generates and processes synthetic product sales data."""
-    np.random.seed(42) # for reproducibility
+# --- Sentiment Analysis Functions ---
+def get_textblob_sentiment(text):
+    """Analyzes text sentiment using TextBlob."""
+    if not isinstance(text, str):
+        return 'Neutral' # Handle non-string input
+    analysis = TextBlob(text)
+    if analysis.sentiment.polarity > 0:
+        return 'Positive'
+    elif analysis.sentiment.polarity < 0:
+        return 'Negative'
+    else:
+        return 'Neutral'
 
-    # Generate synthetic data
-    dates = pd.date_range(start='2023-01-01', end='2024-12-31', freq='W')
-    products = ['Product A', 'Product B', 'Product C', 'Product D']
-    regions = ['North', 'South', 'East', 'West']
-    
-    data = []
-    for date in dates:
-        for product in products:
-            for region in regions:
-                sales = np.random.randint(50, 500) + np.random.rand() * 50 # Base sales
-                price = np.random.uniform(10, 100)
-                if 'A' in product: sales += np.random.randint(0, 100) # Product A bonus
-                if date.month in [11, 12]: sales += np.random.randint(0, 150) # Year-end boost
-                
-                data.append([date, product, region, sales, price, sales * price]) # Add Revenue
+def get_vader_sentiment(text):
+    """Analyzes text sentiment using NLTK VADER."""
+    if not isinstance(text, str):
+        return 'Neutral' # Handle non-string input
+    vs = analyzer.polarity_scores(text)
+    if vs['compound'] >= 0.05:
+        return 'Positive'
+    elif vs['compound'] <= -0.05:
+        return 'Negative'
+    else:
+        return 'Neutral'
 
-    df = pd.DataFrame(data, columns=['Date', 'Product', 'Region', 'Sales_Units', 'Price_Per_Unit', 'Revenue'])
-    
-    df['Month'] = df['Date'].dt.to_period('M')
-    df['Year'] = df['Date'].dt.year
-    df['Quarter'] = df['Date'].dt.to_period('Q')
-    
+# --- Data Loading and Analysis ---
+@st.cache_data # Cache data to avoid reloading on every interaction
+def load_and_analyze_data(file_path):
+    """Loads CSV, performs sentiment analysis, and returns DataFrame."""
+    try:
+        df = pd.read_csv(file_path)
+    except FileNotFoundError:
+        st.error(f"Error: Dataset '{file_path}' not found. Please ensure it's in the same directory.")
+        st.stop()
+    except Exception as e:
+        st.error(f"Error loading dataset: {e}")
+        st.stop()
+
+    # --- IMPORTANT ---
+    # Make sure 'Sentence' below matches the actual column name in your Dataset-SA.csv
+    # If your text column is named 'review_text', change df['Sentence'] to df['review_text']
+    if 'Sentence' not in df.columns:
+        st.error("Error: 'Sentence' column not found in your CSV. Please check your dataset or update the column name in app.py.")
+        st.stop()
+
+    # Apply sentiment analysis
+    df['Sentiment_TextBlob'] = df['Sentence'].apply(get_textblob_sentiment)
+    df['Sentiment_VADER'] = df['Sentence'].apply(get_vader_sentiment)
+
+    # For a more detailed breakdown, could also store scores
+    df['VADER_Compound'] = df['Sentence'].apply(lambda x: analyzer.polarity_scores(x)['compound'] if isinstance(x, str) else 0)
+
     return df
 
-# Load the data
-df = load_and_process_data()
+# Load the dataset
+# Ensure 'Dataset-SA.csv' is in the same directory as this app.py
+df = load_and_analyze_data('Dataset-SA.csv')
 
-# --- Title & Introduction (Gen Z friendly, concise) ---
-st.title("🛍️ Product Performance Dashboard")
+# --- Title & Introduction ---
+st.title("🗣️ Sentiment Pulse Dashboard")
 st.markdown("""
-Welcome to your go-to hub for understanding product trends! 🚀
-Dive into sales, revenue, and regional performance with sleek visualizations and quick insights.
-Let's get those data-driven vibes! ✨
+Welcome to your go-to dashboard for **unlocking insights from text data!** ✨
+Quickly grasp the overall sentiment distribution from your dataset and dive into individual text analysis.
 """)
 
-# --- Sidebar Filters (Intuitive, clean) ---
-st.sidebar.header("🎯 Filter Your View")
+# --- Sidebar Filters ---
+st.sidebar.header("🎯 Filter Options")
 
-all_products = ['All Products'] + list(df['Product'].unique())
-selected_product = st.sidebar.selectbox(
-    "Choose a Product:",
-    options=all_products,
-    index=0 # 'All Products' selected by default
-)
-
-all_regions = ['All Regions'] + list(df['Region'].unique())
-selected_region = st.sidebar.selectbox(
-    "Select a Region:",
-    options=all_regions,
+# Filter by VADER Sentiment
+vader_sentiments = ['All'] + list(df['Sentiment_VADER'].unique())
+selected_vader_sentiment = st.sidebar.selectbox(
+    "Filter by VADER Sentiment:",
+    options=vader_sentiments,
     index=0
 )
 
-# Date Range Slider
-min_date = df['Date'].min().date()
-max_date = df['Date'].max().date()
-
-date_range = st.sidebar.date_input(
-    "Pick a Date Range:",
-    value=(min_date, max_date),
-    min_value=min_date,
-    max_value=max_date
+# Filter by TextBlob Sentiment
+textblob_sentiments = ['All'] + list(df['Sentiment_TextBlob'].unique())
+selected_textblob_sentiment = st.sidebar.selectbox(
+    "Filter by TextBlob Sentiment:",
+    options=textblob_sentiments,
+    index=0
 )
 
-# Ensure date_range always has two elements
-if len(date_range) == 2:
-    start_date = pd.to_datetime(date_range[0])
-    end_date = pd.to_datetime(date_range[1])
-elif len(date_range) == 1:
-    start_date = pd.to_datetime(date_range[0])
-    end_date = pd.to_datetime(date_range[0]) # If only one date selected, make it a single day range
-else: # Default to full range if nothing selected or invalid
-    start_date = pd.to_datetime(min_date)
-    end_date = pd.to_datetime(max_date)
-
 # Apply filters
-filtered_df = df[
-    (df['Date'] >= start_date) & 
-    (df['Date'] <= end_date)
-]
+filtered_df = df.copy()
+if selected_vader_sentiment != 'All':
+    filtered_df = filtered_df[filtered_df['Sentiment_VADER'] == selected_vader_sentiment]
+if selected_textblob_sentiment != 'All':
+    filtered_df = filtered_df[filtered_df['Sentiment_TextBlob'] == selected_textblob_sentiment]
 
-if selected_product != 'All Products':
-    filtered_df = filtered_df[filtered_df['Product'] == selected_product]
-
-if selected_region != 'All Regions':
-    filtered_df = filtered_df[filtered_df['Region'] == selected_region]
-
-# Check if filtered data is empty
+# --- Main Dashboard Content ---
 if filtered_df.empty:
-    st.warning("😬 No data available for the selected filters. Try adjusting your selections!")
+    st.warning("😬 No data matches your current filter selections. Try adjusting them!")
 else:
-    # --- Key Performance Indicators (KPIs) ---
     st.markdown("---") # Visual separator
-    st.header("📊 Quick Stats")
+    st.header("📊 Dataset Overview")
 
-    total_sales = filtered_df['Sales_Units'].sum()
-    total_revenue = filtered_df['Revenue'].sum()
-    avg_price = filtered_df['Price_Per_Unit'].mean()
-    num_products = filtered_df['Product'].nunique()
-    num_regions = filtered_df['Region'].nunique()
-
-    col1, col2, col3, col4, col5 = st.columns(5) # Use columns for a neat layout
+    col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric(label="Total Sales Units", value=f"{total_sales:,.0f} 📈")
+        st.metric(label="Total Sentences Analyzed", value=f"{len(df):,.0f} 📝")
     with col2:
-        st.metric(label="Total Revenue", value=f"${total_revenue:,.2f} 💰")
+        st.metric(label="Reviews Matching Filters", value=f"{len(filtered_df):,.0f} ✅")
     with col3:
-        st.metric(label="Avg. Price/Unit", value=f"${avg_price:,.2f} 🏷️")
-    with col4:
-        st.metric(label="Unique Products", value=f"{num_products} 📦")
-    with col5:
-        st.metric(label="Unique Regions", value=f"{num_regions} 🌍")
+        avg_compound_score = filtered_df['VADER_Compound'].mean()
+        st.metric(label="Avg. VADER Compound Score", value=f"{avg_compound_score:.2f} 🌟")
 
-    # --- Visualizations (Professional, insight-driven) ---
+
+    # --- Visualizations ---
     st.markdown("---")
-    st.header("✨ Visual Insights")
+    st.header("📈 Sentiment Distribution")
 
-    # Sales Trend Over Time
-    st.subheader("1. Sales Performance Over Time")
-    sales_over_time = filtered_df.groupby('Date')['Sales_Units'].sum().reset_index()
-    fig1, ax1 = plt.subplots()
-    sns.lineplot(data=sales_over_time, x='Date', y='Sales_Units', ax=ax1, marker='o')
-    ax1.set_title('Total Sales Units Over Time 📊')
-    ax1.set_xlabel('Date')
-    ax1.set_ylabel('Sales Units')
-    plt.xticks(rotation=45)
-    st.pyplot(fig1)
-    st.markdown("""
-    **Insight Summary:**
-    * **Trend Spotting:** Observe the overall trajectory of sales. Is it growing, declining, or stable?
-    * **Seasonal Patterns:** Look for recurring peaks (e.g., year-end holidays) or dips (e.g., off-season).
-    * **Anomalies:** Identify any sudden, unusual spikes or drops that might indicate specific events (promotions, outages).
-    """)
+    col_viz1, col_viz2 = st.columns(2)
 
-    # Sales by Product
-    st.subheader("2. Top Product Sales (Units)")
-    sales_by_product = filtered_df.groupby('Product')['Sales_Units'].sum().sort_values(ascending=False).reset_index()
-    fig2, ax2 = plt.subplots()
-    sns.barplot(data=sales_by_product, x='Sales_Units', y='Product', ax=ax2, palette='viridis')
-    ax2.set_title('Sales Units by Product Category 📦')
-    ax2.set_xlabel('Total Sales Units')
-    ax2.set_ylabel('Product')
-    st.pyplot(fig2)
-    st.markdown("""
-    **Insight Summary:**
-    * **Top Performers:** Quickly identify which products are driving the most sales.
-    * **Underperformers:** See if any products are lagging behind and might need attention.
-    * **Product Mix:** Understand the relative contribution of each product to overall unit sales.
-    """)
+    with col_viz1:
+        st.subheader("VADER Sentiment Breakdown")
+        vader_counts = filtered_df['Sentiment_VADER'].value_counts(normalize=True) * 100
+        fig1, ax1 = plt.subplots(figsize=(7, 7))
+        # Ensure order and colors for consistency
+        order = ['Positive', 'Neutral', 'Negative']
+        colors = {'Positive': 'lightgreen', 'Neutral': 'skyblue', 'Negative': 'salmon'}
+        
+        # Plot only categories that exist in the filtered data
+        vader_counts = vader_counts.reindex(order, fill_value=0)
+        
+        ax1.pie(vader_counts, labels=vader_counts.index, autopct='%1.1f%%', startangle=90,
+                colors=[colors[label] for label in vader_counts.index])
+        ax1.set_title('VADER Sentiment Share')
+        st.pyplot(fig1)
 
-    # Revenue by Region
-    st.subheader("3. Revenue Distribution by Region")
-    revenue_by_region = filtered_df.groupby('Region')['Revenue'].sum().sort_values(ascending=False).reset_index()
-    fig3, ax3 = plt.subplots()
-    sns.pie(data=revenue_by_region, x='Revenue', labels=revenue_by_region['Region'], autopct='%1.1f%%', startangle=90, colors=sns.color_palette('pastel'))
-    ax3.set_title('Revenue Share by Region 🌍')
-    ax3.set_ylabel('') # Hide default y-label for pie chart
-    st.pyplot(fig3)
-    st.markdown("""
-    **Insight Summary:**
-    * **Regional Dominance:** See which regions are generating the most revenue.
-    * **Market Share:** Understand the proportional revenue contribution of each geographical area.
-    * **Targeted Strategies:** Helps in allocating resources or tailoring marketing efforts based on regional performance.
-    """)
+    with col_viz2:
+        st.subheader("TextBlob Sentiment Breakdown")
+        textblob_counts = filtered_df['Sentiment_TextBlob'].value_counts(normalize=True) * 100
+        fig2, ax2 = plt.subplots(figsize=(7, 7))
+        
+        # Ensure order and colors for consistency
+        textblob_counts = textblob_counts.reindex(order, fill_value=0)
+        
+        ax2.pie(textblob_counts, labels=textblob_counts.index, autopct='%1.1f%%', startangle=90,
+                colors=[colors[label] for label in textblob_counts.index])
+        ax2.set_title('TextBlob Sentiment Share')
+        st.pyplot(fig2)
     
-    # --- Detailed Data View (Optional, for deeper dive) ---
-    st.markdown("---")
-    st.header("🔍 Dive Deeper: Raw Data View")
-    if st.checkbox("Show Detailed Data Table"):
-        st.dataframe(filtered_df)
-
     st.markdown("""
-    ---
-    Got questions? Feel free to reach out or explore the data further! 🧑‍💻
+    **Key Takeaways from Sentiment Distribution:**
+    * **Overall Mood:** Get a quick feel for the dominant sentiment in your dataset (e.g., predominantly positive, or a balanced mix).
+    * **Method Comparison:** Observe if VADER and TextBlob offer similar conclusions, or if there are notable differences in their classification.
+    * **Actionable Insights:** A high percentage of negative sentiment might indicate areas needing immediate attention (e.g., product issues, service complaints).
     """)
+
+    # --- Individual Review Analysis ---
+    st.markdown("---")
+    st.header("✍️ Analyze Custom Text")
+    user_text = st.text_area(
+        "Paste any sentence or paragraph here to analyze its sentiment:",
+        "This product is absolutely fantastic and exceeded all my expectations! Highly recommend for everyone."
+    )
+
+    if st.button("Get Sentiment Spark!"):
+        if user_text:
+            st.subheader("Your Text's Sentiment:")
+            
+            # TextBlob Analysis
+            textblob_result = get_textblob_sentiment(user_text)
+            
+            # VADER Analysis
+            vader_scores = analyzer.polarity_scores(user_text)
+            vader_result = get_vader_sentiment(user_text)
+
+            st.markdown(f"**Original Text:** \"{user_text}\"")
+            st.markdown(f"**TextBlob Prediction:** <span style='background-color:#ADD8E6; padding: 5px 10px; border-radius: 5px;'>**{textblob_result}**</span>", unsafe_allow_html=True)
+            st.markdown(f"**VADER Prediction:** <span style='background-color:#90EE90; padding: 5px 10px; border-radius: 5px;'>**{vader_result}**</span>", unsafe_allow_html=True)
+            st.markdown(f"**VADER Polarity Scores:** (Negative: {vader_scores['neg']:.2f}, Neutral: {vader_scores['neu']:.2f}, Positive: {vader_scores['pos']:.2f}, Compound: {vader_scores['compound']:.2f})")
+            
+            st.markdown("""
+            * **TextBlob Polarity:** Ranges from -1 (most negative) to +1 (most positive).
+            * **VADER Compound Score:** A normalized, weighted composite score, typically between -1 (most extreme negative) and +1 (most extreme positive).
+            """)
+        else:
+            st.warning("Please enter some text to analyze. Don't leave it blank!")
+
+    st.markdown("---")
+    st.info("💡 Pro Tip: Filter the dataset using the sidebar to explore specific sentiment groups!")
+
+    # Optional: Display Raw Data Table
+    if st.checkbox("Show Raw Data Table (Filtered)"):
+        st.subheader("Filtered Dataset Preview")
+        st.dataframe(filtered_df)
