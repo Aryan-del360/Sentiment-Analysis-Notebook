@@ -5,19 +5,23 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from textblob import TextBlob
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
-import nltk
+import nltk # Ensure nltk is imported
 
-# --- NLTK Data Download (Crucial for Deployment) ---
-# Ensure VADER lexicon is available. In Dockerfile, you already have:
-# RUN python -m nltk.downloader vader_lexicon
-# For local testing, you might need to uncomment and run this once:
-# try:
-#     nltk.data.find('sentiment/vader_lexicon.zip')
-# except nltk.downloader.DownloadError:
-#     nltk.download('vader_lexicon')
+# --- NLTK Data Download (More Robust Approach for Deployment) ---
+# Use st.cache_resource to download NLTK data only once per deployment/session
+@st.cache_resource
+def download_nltk_vader():
+    try:
+        nltk.data.find('sentiment/vader_lexicon.zip')
+        st.success("NLTK 'vader_lexicon' already downloaded and found. 🎉")
+    except LookupError:
+        st.info("Downloading NLTK 'vader_lexicon' (first run). This might take a moment... ⏳")
+        nltk.download('vader_lexicon', quiet=True)
+        st.success("NLTK 'vader_lexicon' downloaded successfully! ✅")
+    return SentimentIntensityAnalyzer() # Return the initialized analyzer
 
-# Initialize VADER sentiment analyzer
-analyzer = SentimentIntensityAnalyzer()
+# Call the function to ensure data is downloaded and analyzer is ready
+analyzer = download_nltk_vader()
 
 # --- Configuration & Setup ---
 st.set_page_config(
@@ -154,8 +158,9 @@ else:
     with col2:
         st.metric(label="Reviews Matching Filters", value=f"{len(filtered_df):,.0f} ✅")
     with col3:
-        avg_overall_rating = filtered_df['Rate'].mean() if 'Rate' in filtered_df.columns else 'N/A'
-        if avg_overall_rating != 'N/A':
+        # Check if 'Rate' column exists before trying to calculate mean
+        if 'Rate' in filtered_df.columns and not filtered_df['Rate'].isnull().all():
+            avg_overall_rating = filtered_df['Rate'].mean()
             st.metric(label="Avg. Product Rating", value=f"{avg_overall_rating:.1f} ⭐")
         else:
             st.metric(label="Avg. Product Rating", value="N/A")
@@ -207,10 +212,12 @@ else:
         # Calculate positive sentiment percentage per product
         product_sentiment_vader = filtered_df.groupby('product_name')['Sentiment_VADER'].value_counts(normalize=True).unstack(fill_value=0)
         product_positive_percentage = product_sentiment_vader.get('Positive', pd.Series(dtype=float)) * 100
-        product_positive_percentage = product_positive_percentage.sort_values(ascending=False)
+        
+        # Filter out products with 0 positive reviews or no data, then sort
+        product_positive_percentage = product_positive_percentage[product_positive_percentage > 0].sort_values(ascending=False)
 
         if not product_positive_percentage.empty:
-            fig_prod, ax_prod = plt.subplots(figsize=(12, 7))
+            fig_prod, ax_prod = plt.subplots(figsize=(12, min(7 + len(product_positive_percentage) * 0.5, 20))) # Adjust fig size dynamically
             sns.barplot(x=product_positive_percentage.values, y=product_positive_percentage.index, ax=ax_prod, palette='Greens_r')
             ax_prod.set_title('Percentage of Positive Reviews Per Product (VADER)')
             ax_prod.set_xlabel('% Positive Reviews')
