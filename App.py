@@ -69,6 +69,11 @@ def load_and_analyze_data(file_path):
         st.error(f"Error loading dataset: {e}")
         st.stop()
 
+    # --- IMPORTANT FIX: Convert 'Rate' column to numeric, coercing errors to NaN ---
+    if 'Rate' in df.columns:
+        df['Rate'] = pd.to_numeric(df['Rate'], errors='coerce')
+    # --- END OF FIX ---
+
     # --- IMPORTANT: Column names for text data and product name ---
     # The text column in Dataset-SA.csv is 'Review' as per your README.md
     if 'Review' not in df.columns:
@@ -150,6 +155,7 @@ else:
         st.metric(label="Reviews Matching Filters", value=f"{len(filtered_df):,.0f} ✅")
     with col3:
         # Check if 'Rate' column exists before trying to calculate mean
+        # The 'errors='coerce' in pd.to_numeric ensures non-numeric become NaN, which mean() can handle.
         if 'Rate' in filtered_df.columns and not filtered_df['Rate'].isnull().all():
             avg_overall_rating = filtered_df['Rate'].mean()
             st.metric(label="Avg. Product Rating", value=f"{avg_overall_rating:.1f} ⭐")
