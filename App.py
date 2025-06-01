@@ -263,4 +263,10 @@ else:
             st.warning("Please enter some text to analyze. Don't leave it blank!")
 
     st.markdown("---")
-    st.info("💡 Pro Tip: Use the filters in the sidebar to narrow down your analysis to specific products or...
+    # Corrected line 266:
+    st.info("💡 Pro Tip: Use the filters in the sidebar to narrow down your analysis to specific products or sentiment types!")
+
+    # Optional: Display Raw Data Table
+    if st.checkbox("Show Raw Data Table (Filtered)"):
+        st.subheader("Filtered Dataset Preview")
+        st.dataframe(filtered_df)
