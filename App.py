@@ -9,19 +9,18 @@ import nltk # Ensure nltk is imported
 
 # --- Configuration & Setup (MUST be the absolute first Streamlit command) ---
 st.set_page_config(
-    page_title="Product Sentiment Explorer 🛍️",
+    page_title="Product Sentiment Dashboard 🛍️",
     page_icon="📈",
-    layout="wide",
+    layout="wide", # Use wide layout for more space
     initial_sidebar_state="expanded"
 )
 
-# --- NLTK Data Download (Now defined/called AFTER st.set_page_config) ---
-# Use st.cache_resource to download NLTK data only once per deployment/session
+# --- NLTK Data Download (Cached to run once per deployment) ---
 @st.cache_resource
 def download_nltk_vader():
     try:
         nltk.data.find('sentiment/vader_lexicon.zip')
-        st.success("NLTK 'vader_lexicon' already downloaded and found. 🎉")
+        # st.success("NLTK 'vader_lexicon' already downloaded and found. 🎉") # Remove this from final app, it clutters
     except LookupError:
         st.info("Downloading NLTK 'vader_lexicon' (first run). This might take a moment... ⏳")
         nltk.download('vader_lexicon', quiet=True)
@@ -31,7 +30,7 @@ def download_nltk_vader():
 # Call the function to ensure data is downloaded and analyzer is ready
 analyzer = download_nltk_vader()
 
-# --- Sentiment Analysis Functions ---
+# --- Sentiment Analysis Functions (unchanged) ---
 def get_textblob_sentiment(text):
     """Analyzes text sentiment using TextBlob."""
     if not isinstance(text, str):
@@ -56,8 +55,8 @@ def get_vader_sentiment(text):
     else:
         return 'Neutral'
 
-# --- Data Loading and Analysis ---
-@st.cache_data # Cache data to avoid reloading on every interaction
+# --- Data Loading and Analysis (Cached for performance) ---
+@st.cache_data
 def load_and_analyze_data(file_path):
     """Loads CSV, performs sentiment analysis, and returns DataFrame."""
     try:
@@ -69,13 +68,13 @@ def load_and_analyze_data(file_path):
         st.error(f"Error loading dataset: {e}")
         st.stop()
 
-    # --- IMPORTANT FIX: Convert 'Rate' column to numeric, coercing errors to NaN ---
+    # Convert 'Rate' column to numeric, coercing errors to NaN
     if 'Rate' in df.columns:
         df['Rate'] = pd.to_numeric(df['Rate'], errors='coerce')
-    # --- END OF FIX ---
+    else:
+        st.warning("Column 'Rate' not found in dataset. Some metrics will be unavailable.")
 
-    # --- IMPORTANT: Column names for text data and product name ---
-    # The text column in Dataset-SA.csv is 'Review' as per your README.md
+    # Ensure required text columns exist
     if 'Review' not in df.columns:
         st.error("Error: 'Review' column not found in your CSV. Please check your dataset or update the column name in app.py if it's different.")
         st.stop()
@@ -83,190 +82,214 @@ def load_and_analyze_data(file_path):
         st.error("Error: 'product_name' column not found in your CSV. This is needed for product-wise analysis.")
         st.stop()
 
-    # Apply sentiment analysis to the 'Review' column
+    # Apply sentiment analysis
     df['Sentiment_TextBlob'] = df['Review'].apply(get_textblob_sentiment)
     df['Sentiment_VADER'] = df['Review'].apply(get_vader_sentiment)
-
-    # For a more detailed breakdown, could also store scores
     df['VADER_Compound'] = df['Review'].apply(lambda x: analyzer.polarity_scores(x)['compound'] if isinstance(x, str) else 0)
 
     return df
 
 # Load the dataset
-# Ensure 'Dataset-SA.csv' is in the same directory as this app.py
 df = load_and_analyze_data('Dataset-SA.csv')
 
-# --- Title & Introduction ---
-st.title("🗣️ Product Review Sentiment Dashboard")
+# --- Main Title and Introduction ---
+st.title("🛍️ E-commerce Product Review Sentiment Dashboard")
 st.markdown("""
-Welcome to your interactive hub for **understanding customer sentiment across different products!** 🚀
-Use the filters to dive deep into review sentiment for specific products, explore trends, and gain actionable insights.
+Welcome to your interactive dashboard for **understanding customer sentiment!**
+Use the filters in the sidebar to refine your analysis, explore sentiment distributions,
+and analyze individual reviews.
 """)
 
-# --- Sidebar Filters ---
-st.sidebar.header("🎯 Filter Your View")
+# --- Sidebar for Filters ---
+st.sidebar.header("🎯 Filter Options")
 
-# Filter by Product Name
-all_products = ['All Products'] + sorted(list(df['product_name'].unique()))
-selected_product = st.sidebar.selectbox(
-    "Select a Product:",
-    options=all_products,
-    index=0 # 'All Products' selected by default
-)
+with st.sidebar.expander("Filter by Product"):
+    all_products = ['All Products'] + sorted(list(df['product_name'].unique()))
+    selected_product = st.selectbox(
+        "Select a Product:",
+        options=all_products,
+        index=0 # 'All Products' by default
+    )
 
-# Filter by VADER Sentiment
-vader_sentiments = ['All'] + list(df['Sentiment_VADER'].unique())
-selected_vader_sentiment = st.sidebar.selectbox(
-    "Filter by VADER Sentiment:",
-    options=vader_sentiments,
-    index=0
-)
-
-# Filter by TextBlob Sentiment
-textblob_sentiments = ['All'] + list(df['Sentiment_TextBlob'].unique())
-selected_textblob_sentiment = st.sidebar.selectbox(
-    "Filter by TextBlob Sentiment:",
-    options=textblob_sentiments,
-    index=0
-)
+with st.sidebar.expander("Filter by Sentiment Type"):
+    st.markdown("**VADER Sentiment:**")
+    vader_sentiments = ['All'] + list(df['Sentiment_VADER'].unique())
+    selected_vader_sentiment = st.selectbox(
+        "Filter by VADER Sentiment:",
+        options=vader_sentiments,
+        index=0,
+        key="vader_filter"
+    )
+    st.markdown("**TextBlob Sentiment:**")
+    textblob_sentiments = ['All'] + list(df['Sentiment_TextBlob'].unique())
+    selected_textblob_sentiment = st.selectbox(
+        "Filter by TextBlob Sentiment:",
+        options=textblob_sentiments,
+        index=0,
+        key="textblob_filter"
+    )
 
 # Apply filters
 filtered_df = df.copy()
 if selected_product != 'All Products':
     filtered_df = filtered_df[filtered_df['product_name'] == selected_product]
-
 if selected_vader_sentiment != 'All':
     filtered_df = filtered_df[filtered_df['Sentiment_VADER'] == selected_vader_sentiment]
 if selected_textblob_sentiment != 'All':
     filtered_df = filtered_df[filtered_df['Sentiment_TextBlob'] == selected_textblob_sentiment]
 
+# --- Main Content Area with Tabs ---
+st.markdown("---")
 
-# --- Main Dashboard Content ---
-if filtered_df.empty:
-    st.warning("😬 No data matches your current filter selections. Try adjusting them!")
-else:
-    st.markdown("---") # Visual separator
-    st.header("📊 Filtered Data Overview")
+tab1, tab2, tab3, tab4 = st.tabs(["📊 Overview & Metrics", "📈 Sentiment Distribution", "📦 Product Insights", "✍️ Analyze Custom Text"])
 
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric(label="Total Reviews in Dataset", value=f"{len(df):,.0f} 📝")
-    with col2:
-        st.metric(label="Reviews Matching Filters", value=f"{len(filtered_df):,.0f} ✅")
-    with col3:
-        # Check if 'Rate' column exists before trying to calculate mean
-        # The 'errors='coerce' in pd.to_numeric ensures non-numeric become NaN, which mean() can handle.
-        if 'Rate' in filtered_df.columns and not filtered_df['Rate'].isnull().all():
-            avg_overall_rating = filtered_df['Rate'].mean()
-            st.metric(label="Avg. Product Rating", value=f"{avg_overall_rating:.1f} ⭐")
-        else:
-            st.metric(label="Avg. Product Rating", value="N/A")
-    with col4:
-        avg_compound_score = filtered_df['VADER_Compound'].mean()
-        st.metric(label="Avg. VADER Compound Score", value=f"{avg_compound_score:.2f} 🌟")
+with tab1:
+    st.header("Overall Dashboard Metrics")
+    if filtered_df.empty:
+        st.warning("😬 No data matches your current filter selections. Try adjusting them!")
+    else:
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric(label="Total Reviews (Dataset)", value=f"{len(df):,.0f} 📝")
+        with col2:
+            st.metric(label="Reviews Matching Filters", value=f"{len(filtered_df):,.0f} ✅")
+        with col3:
+            if 'Rate' in filtered_df.columns and not filtered_df['Rate'].isnull().all():
+                avg_overall_rating = filtered_df['Rate'].mean()
+                st.metric(label="Avg. Product Rating", value=f"{avg_overall_rating:.1f} ⭐")
+            else:
+                st.metric(label="Avg. Product Rating", value="N/A")
+        with col4:
+            avg_compound_score = filtered_df['VADER_Compound'].mean()
+            st.metric(label="Avg. VADER Compound Score", value=f"{avg_compound_score:.2f} 🌟")
 
-
-    # --- Visualizations ---
-    st.markdown("---")
-    st.header("📈 Sentiment Distribution")
-
-    col_viz1, col_viz2 = st.columns(2)
-
-    with col_viz1:
-        st.subheader("VADER Sentiment Breakdown")
-        vader_counts = filtered_df['Sentiment_VADER'].value_counts(normalize=True) * 100
-        fig1, ax1 = plt.subplots(figsize=(7, 7))
-        order = ['Positive', 'Neutral', 'Negative']
-        colors = {'Positive': 'lightgreen', 'Neutral': 'skyblue', 'Negative': 'salmon'}
-        vader_counts = vader_counts.reindex(order, fill_value=0)
-        ax1.pie(vader_counts, labels=vader_counts.index, autopct='%1.1f%%', startangle=90,
-                colors=[colors[label] for label in vader_counts.index])
-        ax1.set_title('VADER Sentiment Share')
-        st.pyplot(fig1)
-
-    with col_viz2:
-        st.subheader("TextBlob Sentiment Breakdown")
-        textblob_counts = filtered_df['Sentiment_TextBlob'].value_counts(normalize=True) * 100
-        fig2, ax2 = plt.subplots(figsize=(7, 7))
-        textblob_counts = textblob_counts.reindex(order, fill_value=0)
-        ax2.pie(textblob_counts, labels=textblob_counts.index, autopct='%1.1f%%', startangle=90,
-                colors=[colors[label] for label in textblob_counts.index])
-        ax2.set_title('TextBlob Sentiment Share')
-        st.pyplot(fig2)
-
-    st.markdown("""
-    **Key Takeaways from Sentiment Distribution:**
-    * **Overall Mood:** Get a quick feel for the dominant sentiment within the selected product(s).
-    * **Method Comparison:** Observe if VADER and TextBlob offer similar conclusions, or if there are differences.
-    * **Actionable Insights:** A high percentage of negative sentiment might indicate product-specific issues needing immediate attention.
-    """)
-
-    # --- Product-wise Sentiment Breakdown (if 'All Products' selected) ---
-    if selected_product == 'All Products' and len(filtered_df['product_name'].unique()) > 1:
         st.markdown("---")
-        st.header("📦 Sentiment Breakdown Per Product (VADER)")
+        st.subheader("Random Reviews Sample")
+        st.dataframe(filtered_df[['product_name', 'Review', 'Rate', 'Sentiment_VADER', 'Sentiment_TextBlob']].sample(min(5, len(filtered_df))), use_container_width=True)
 
-        # Calculate positive sentiment percentage per product
+with tab2:
+    st.header("Sentiment Distribution Visualizations")
+    if filtered_df.empty:
+        st.warning("😬 No data available for plots. Adjust filters!")
+    else:
+        col_viz1, col_viz2 = st.columns(2)
+        order = ['Positive', 'Neutral', 'Negative']
+        colors = {'Positive': '#66c2a5', 'Neutral': '#8da0cb', 'Negative': '#fc8d62'} # Softer, distinct colors
+
+        with col_viz1:
+            st.subheader("VADER Sentiment Breakdown")
+            vader_counts = filtered_df['Sentiment_VADER'].value_counts(normalize=True) * 100
+            fig1, ax1 = plt.subplots(figsize=(6, 6)) # Slightly smaller for tabs
+            vader_counts = vader_counts.reindex(order, fill_value=0)
+            ax1.pie(vader_counts, labels=vader_counts.index, autopct='%1.1f%%', startangle=90,
+                    colors=[colors[label] for label in vader_counts.index],
+                    pctdistance=0.85, wedgeprops=dict(width=0.4)) # Donut chart
+            centre_circle = plt.Circle((0,0),0.70,fc='white') # For donut chart
+            fig1.gca().add_artist(centre_circle)
+            ax1.set_title('VADER Sentiment Share', fontsize=14)
+            st.pyplot(fig1)
+
+        with col_viz2:
+            st.subheader("TextBlob Sentiment Breakdown")
+            textblob_counts = filtered_df['Sentiment_TextBlob'].value_counts(normalize=True) * 100
+            fig2, ax2 = plt.subplots(figsize=(6, 6))
+            textblob_counts = textblob_counts.reindex(order, fill_value=0)
+            ax2.pie(textblob_counts, labels=textblob_counts.index, autopct='%1.1f%%', startangle=90,
+                    colors=[colors[label] for label in textblob_counts.index],
+                    pctdistance=0.85, wedgeprops=dict(width=0.4)) # Donut chart
+            centre_circle = plt.Circle((0,0),0.70,fc='white') # For donut chart
+            fig2.gca().add_artist(centre_circle)
+            ax2.set_title('TextBlob Sentiment Share', fontsize=14)
+            st.pyplot(fig2)
+
+        st.markdown("""
+        * **VADER** (Valence Aware Dictionary and sEntiment Reasoner) is a lexicon and rule-based sentiment analysis tool that is specifically attuned to sentiments expressed in social media.
+        * **TextBlob** is a Python library for processing textual data. It provides a simple API for diving into common NLP tasks like sentiment analysis.
+        """)
+
+with tab3:
+    st.header("Product-wise Sentiment Insights")
+    if selected_product != 'All Products':
+        st.info(f"💡 You have selected a specific product (**{selected_product}**). This tab displays insights for 'All Products' when no specific product is filtered.")
+    elif filtered_df.empty:
+        st.warning("😬 No data available to show product insights. Adjust filters!")
+    else:
+        st.subheader("Percentage of Positive Reviews Per Product (VADER)")
         product_sentiment_vader = filtered_df.groupby('product_name')['Sentiment_VADER'].value_counts(normalize=True).unstack(fill_value=0)
         product_positive_percentage = product_sentiment_vader.get('Positive', pd.Series(dtype=float)) * 100
 
-        # Filter out products with 0 positive reviews or no data, then sort
+        # Filter out products with 0 positive reviews for clearer visualization
         product_positive_percentage = product_positive_percentage[product_positive_percentage > 0].sort_values(ascending=False)
 
         if not product_positive_percentage.empty:
-            fig_prod, ax_prod = plt.subplots(figsize=(12, min(7 + len(product_positive_percentage) * 0.5, 20))) # Adjust fig size dynamically
-            sns.barplot(x=product_positive_percentage.values, y=product_positive_percentage.index, ax=ax_prod, palette='Greens_r')
-            ax_prod.set_title('Percentage of Positive Reviews Per Product (VADER)')
+            fig_prod, ax_prod = plt.subplots(figsize=(10, max(6, len(product_positive_percentage) * 0.4))) # Dynamic height
+            sns.barplot(x=product_positive_percentage.values, y=product_positive_percentage.index, ax=ax_prod, palette='viridis')
+            ax_prod.set_title('Top Products by Positive Sentiment (VADER)', fontsize=14)
             ax_prod.set_xlabel('% Positive Reviews')
             ax_prod.set_ylabel('Product Name')
+            plt.tight_layout() # Adjust layout to prevent labels overlapping
             st.pyplot(fig_prod)
-
             st.markdown("""
-            **Insights Per Product:**
-            * **Top Performers:** Easily spot products with the highest percentage of positive reviews – these are your winners! 🎉
-            * **Areas for Improvement:** Identify products with lower positive sentiment, signaling potential issues that marketing or product teams should investigate.
-            * **Comparative View:** Understand how products stack up against each other in terms of customer satisfaction.
+            This chart helps you quickly identify top-performing products based on the percentage of positive reviews.
+            Products with lower percentages here might need further investigation.
             """)
         else:
-            st.info("No sufficient data to show product-wise sentiment breakdown for current filters.")
+            st.info("Not enough data to show product-wise sentiment breakdown for current filters.")
 
-
-    # --- Individual Review Analysis ---
-    st.markdown("---")
-    st.header("✍️ Analyze Custom Text")
+with tab4:
+    st.header("Analyze Any Text for Sentiment")
+    st.markdown("Want to test how the sentiment models work? Enter any text below!")
     user_text = st.text_area(
-        "Paste any sentence or paragraph here to analyze its sentiment:",
-        "This product is absolutely fantastic and exceeded all my expectations! Highly recommend for everyone."
+        "Paste your text here:",
+        "This product is absolutely fantastic and exceeded all my expectations! Highly recommend for everyone.",
+        height=150
     )
 
-    if st.button("Get Sentiment Spark!"):
+    if st.button("Get Sentiment Analysis!"):
         if user_text:
-            st.subheader("Your Text's Sentiment:")
-
-            # TextBlob Analysis
+            st.subheader("Analysis Results:")
             textblob_result = get_textblob_sentiment(user_text)
-
-            # VADER Analysis
             vader_scores = analyzer.polarity_scores(user_text)
             vader_result = get_vader_sentiment(user_text)
 
             st.markdown(f"**Original Text:** \"{user_text}\"")
-            st.markdown(f"**TextBlob Prediction:** <span style='background-color:#ADD8E6; padding: 5px 10px; border-radius: 5px;'>**{textblob_result}**</span>", unsafe_allow_html=True)
-            st.markdown(f"**VADER Prediction:** <span style='background-color:#90EE90; padding: 5px 10px; border-radius: 5px;'>**{vader_result}**</span>", unsafe_allow_html=True)
-            st.markdown(f"**VADER Polarity Scores:** (Negative: {vader_scores['neg']:.2f}, Neutral: {vader_scores['neu']:.2f}, Positive: {vader_scores['pos']:.2f}, Compound: {vader_scores['compound']:.2f})")
 
+            col_res1, col_res2 = st.columns(2)
+            with col_res1:
+                st.metric(label="TextBlob Prediction", value=textblob_result)
+            with col_res2:
+                st.metric(label="VADER Prediction", value=vader_result)
+
+            st.markdown(f"**VADER Polarity Scores:**")
+            st.json(vader_scores) # Display VADER scores in a nice JSON format
             st.markdown("""
-            * **TextBlob Polarity:** Ranges from -1 (most negative) to +1 (most positive).
-            * **VADER Compound Score:** A normalized, weighted composite score, typically between -1 (most extreme negative) and +1 (most extreme positive).
+            * **VADER Scores Explained:**
+                * `neg`, `neu`, `pos`: Represent the proportion of negative, neutral, and positive words in the text (sum to 1.0).
+                * `compound`: A normalized, weighted composite score which ranges from -1 (most extreme negative) to +1 (most extreme positive).
             """)
         else:
-            st.warning("Please enter some text to analyze. Don't leave it blank!")
+            st.warning("Please enter some text to analyze. The field cannot be empty!")
 
-    st.markdown("---")
-    # Corrected line 266:
-    st.info("💡 Pro Tip: Use the filters in the sidebar to narrow down your analysis to specific products or sentiment types!")
+st.markdown("---")
+with st.expander("📚 Data Dictionary & Usage Tips"):
+    st.markdown("""
+    **Dataset Columns:**
+    * `product_name`: Name of the reviewed product.
+    * `product_price`: Price of the product.
+    * `Rate`: Numerical rating given by the customer (1-5 stars).
+    * `Review`: The raw text of the customer review (primary focus for sentiment analysis).
+    * `Summary`: A brief summary of the review.
+    * `Sentiment`: A pre-labeled sentiment category (Positive, Negative, Neutral) for the review (not used for this app's direct sentiment analysis, but could be for model training).
 
-    # Optional: Display Raw Data Table
-    if st.checkbox("Show Raw Data Table (Filtered)"):
-        st.subheader("Filtered Dataset Preview")
-        st.dataframe(filtered_df)
+    **Usage Tips:**
+    * **Filters:** Use the sidebar filters to narrow down your analysis to specific products or sentiment types.
+    * **Tabs:** Navigate through the tabs for different views of the data: overall metrics, sentiment distribution charts, product-specific insights, and custom text analysis.
+    * **Raw Data:** You can view the raw filtered data at the bottom of the "Overview & Metrics" tab.
+    """)
+
+# Optional: Raw Data Table (can be placed inside a tab or expander as needed)
+with st.expander("Show Raw Data Table (Filtered)"):
+    st.subheader("Filtered Dataset Preview")
+    st.dataframe(filtered_df, use_container_width=True)
+
+st.info("💡 Pro Tip: Filter by product or sentiment type in the sidebar to get more specific insights!")
