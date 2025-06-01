@@ -5,13 +5,18 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from textblob import TextBlob
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
-import nltk # Ensure nltk is imported
+import nltk
 from PIL import Image # NEW: Import Image from Pillow
 
 # NEW: Increase Pillow's maximum image pixel limit to avoid DecompressionBombError
 # Setting to None disables the limit, which is safe for internally generated plots.
-# If you prefer a specific high limit, you can set a large integer (e.g., 400_000_000)
+# This must be done before any image processing (like plotting) occurs.
 Image.MAX_IMAGE_PIXELS = None
+
+# NEW: Configure matplotlib fonts to suppress UserWarnings about missing glyphs
+plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'Liberation Sans']
+plt.rcParams['font.monospace'] = ['DejaVu Sans Mono', 'Courier New', 'Liberation Mono']
+plt.rcParams['font.serif'] = ['DejaVu Serif', 'Times New Roman', 'Liberation Serif']
 
 
 # --- Configuration & Setup (MUST be the absolute first Streamlit command) ---
@@ -27,7 +32,6 @@ st.set_page_config(
 def download_nltk_vader():
     try:
         nltk.data.find('sentiment/vader_lexicon.zip')
-        # st.success("NLTK 'vader_lexicon' already downloaded and found. 🎉") # Remove this from final app, it clutters
     except LookupError:
         st.info("Downloading NLTK 'vader_lexicon' (first run). This might take a moment... ⏳")
         nltk.download('vader_lexicon', quiet=True)
@@ -230,7 +234,8 @@ with tab3:
 
         if not product_positive_percentage.empty:
             fig_prod, ax_prod = plt.subplots(figsize=(10, max(6, len(product_positive_percentage) * 0.4))) # Dynamic height
-            sns.barplot(x=product_positive_percentage.values, y=product_positive_percentage.index, ax=ax_prod, palette='viridis')
+            # NEW: Add hue and legend=False to suppress Seaborn FutureWarning
+            sns.barplot(x=product_positive_percentage.values, y=product_positive_percentage.index, ax=ax_prod, palette='viridis', hue=product_positive_percentage.index, legend=False)
             ax_prod.set_title('Top Products by Positive Sentiment (VADER)', fontsize=14)
             ax_prod.set_xlabel('% Positive Reviews')
             ax_prod.set_ylabel('Product Name')
