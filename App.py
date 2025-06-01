@@ -21,8 +21,8 @@ analyzer = SentimentIntensityAnalyzer()
 
 # --- Configuration & Setup ---
 st.set_page_config(
-    page_title="Sentiment Spark ✨",
-    page_icon="😊",
+    page_title="Product Sentiment Explorer 🛍️",
+    page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -74,10 +74,13 @@ def load_and_analyze_data(file_path):
         st.error(f"Error loading dataset: {e}")
         st.stop()
 
-    # --- IMPORTANT: Column name for text data ---
+    # --- IMPORTANT: Column names for text data and product name ---
     # The text column in Dataset-SA.csv is 'Review' as per your README.md
     if 'Review' not in df.columns:
         st.error("Error: 'Review' column not found in your CSV. Please check your dataset or update the column name in app.py if it's different.")
+        st.stop()
+    if 'product_name' not in df.columns:
+        st.error("Error: 'product_name' column not found in your CSV. This is needed for product-wise analysis.")
         st.stop()
 
     # Apply sentiment analysis to the 'Review' column
@@ -94,14 +97,22 @@ def load_and_analyze_data(file_path):
 df = load_and_analyze_data('Dataset-SA.csv')
 
 # --- Title & Introduction ---
-st.title("🗣️ Sentiment Pulse Dashboard")
+st.title("🗣️ Product Review Sentiment Dashboard")
 st.markdown("""
-Welcome to your go-to dashboard for **unlocking insights from text data!** ✨
-Quickly grasp the overall sentiment distribution from your dataset and dive into individual text analysis.
+Welcome to your interactive hub for **understanding customer sentiment across different products!** 🚀
+Use the filters to dive deep into review sentiment for specific products, explore trends, and gain actionable insights.
 """)
 
 # --- Sidebar Filters ---
-st.sidebar.header("🎯 Filter Options")
+st.sidebar.header("🎯 Filter Your View")
+
+# Filter by Product Name
+all_products = ['All Products'] + sorted(list(df['product_name'].unique()))
+selected_product = st.sidebar.selectbox(
+    "Select a Product:",
+    options=all_products,
+    index=0 # 'All Products' selected by default
+)
 
 # Filter by VADER Sentiment
 vader_sentiments = ['All'] + list(df['Sentiment_VADER'].unique())
@@ -121,24 +132,34 @@ selected_textblob_sentiment = st.sidebar.selectbox(
 
 # Apply filters
 filtered_df = df.copy()
+if selected_product != 'All Products':
+    filtered_df = filtered_df[filtered_df['product_name'] == selected_product]
+
 if selected_vader_sentiment != 'All':
     filtered_df = filtered_df[filtered_df['Sentiment_VADER'] == selected_vader_sentiment]
 if selected_textblob_sentiment != 'All':
     filtered_df = filtered_df[filtered_df['Sentiment_TextBlob'] == selected_textblob_sentiment]
+
 
 # --- Main Dashboard Content ---
 if filtered_df.empty:
     st.warning("😬 No data matches your current filter selections. Try adjusting them!")
 else:
     st.markdown("---") # Visual separator
-    st.header("📊 Dataset Overview")
+    st.header("📊 Filtered Data Overview")
 
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric(label="Total Reviews Analyzed", value=f"{len(df):,.0f} 📝")
+        st.metric(label="Total Reviews in Dataset", value=f"{len(df):,.0f} 📝")
     with col2:
         st.metric(label="Reviews Matching Filters", value=f"{len(filtered_df):,.0f} ✅")
     with col3:
+        avg_overall_rating = filtered_df['Rate'].mean() if 'Rate' in filtered_df.columns else 'N/A'
+        if avg_overall_rating != 'N/A':
+            st.metric(label="Avg. Product Rating", value=f"{avg_overall_rating:.1f} ⭐")
+        else:
+            st.metric(label="Avg. Product Rating", value="N/A")
+    with col4:
         avg_compound_score = filtered_df['VADER_Compound'].mean()
         st.metric(label="Avg. VADER Compound Score", value=f"{avg_compound_score:.2f} 🌟")
 
@@ -153,13 +174,9 @@ else:
         st.subheader("VADER Sentiment Breakdown")
         vader_counts = filtered_df['Sentiment_VADER'].value_counts(normalize=True) * 100
         fig1, ax1 = plt.subplots(figsize=(7, 7))
-        # Ensure order and colors for consistency
         order = ['Positive', 'Neutral', 'Negative']
         colors = {'Positive': 'lightgreen', 'Neutral': 'skyblue', 'Negative': 'salmon'}
-        
-        # Plot only categories that exist in the filtered data
         vader_counts = vader_counts.reindex(order, fill_value=0)
-        
         ax1.pie(vader_counts, labels=vader_counts.index, autopct='%1.1f%%', startangle=90,
                 colors=[colors[label] for label in vader_counts.index])
         ax1.set_title('VADER Sentiment Share')
@@ -169,10 +186,7 @@ else:
         st.subheader("TextBlob Sentiment Breakdown")
         textblob_counts = filtered_df['Sentiment_TextBlob'].value_counts(normalize=True) * 100
         fig2, ax2 = plt.subplots(figsize=(7, 7))
-        
-        # Ensure order and colors for consistency
         textblob_counts = textblob_counts.reindex(order, fill_value=0)
-        
         ax2.pie(textblob_counts, labels=textblob_counts.index, autopct='%1.1f%%', startangle=90,
                 colors=[colors[label] for label in textblob_counts.index])
         ax2.set_title('TextBlob Sentiment Share')
@@ -180,10 +194,38 @@ else:
     
     st.markdown("""
     **Key Takeaways from Sentiment Distribution:**
-    * **Overall Mood:** Get a quick feel for the dominant sentiment in your dataset (e.g., predominantly positive, or a balanced mix).
-    * **Method Comparison:** Observe if VADER and TextBlob offer similar conclusions, or if there are notable differences in their classification.
-    * **Actionable Insights:** A high percentage of negative sentiment might indicate areas needing immediate attention (e.g., product issues, service complaints).
+    * **Overall Mood:** Get a quick feel for the dominant sentiment within the selected product(s).
+    * **Method Comparison:** Observe if VADER and TextBlob offer similar conclusions, or if there are differences.
+    * **Actionable Insights:** A high percentage of negative sentiment might indicate product-specific issues needing immediate attention.
     """)
+
+    # --- Product-wise Sentiment Breakdown (if 'All Products' selected) ---
+    if selected_product == 'All Products' and len(filtered_df['product_name'].unique()) > 1:
+        st.markdown("---")
+        st.header("📦 Sentiment Breakdown Per Product (VADER)")
+        
+        # Calculate positive sentiment percentage per product
+        product_sentiment_vader = filtered_df.groupby('product_name')['Sentiment_VADER'].value_counts(normalize=True).unstack(fill_value=0)
+        product_positive_percentage = product_sentiment_vader.get('Positive', pd.Series(dtype=float)) * 100
+        product_positive_percentage = product_positive_percentage.sort_values(ascending=False)
+
+        if not product_positive_percentage.empty:
+            fig_prod, ax_prod = plt.subplots(figsize=(12, 7))
+            sns.barplot(x=product_positive_percentage.values, y=product_positive_percentage.index, ax=ax_prod, palette='Greens_r')
+            ax_prod.set_title('Percentage of Positive Reviews Per Product (VADER)')
+            ax_prod.set_xlabel('% Positive Reviews')
+            ax_prod.set_ylabel('Product Name')
+            st.pyplot(fig_prod)
+
+            st.markdown("""
+            **Insights Per Product:**
+            * **Top Performers:** Easily spot products with the highest percentage of positive reviews – these are your winners! 🎉
+            * **Areas for Improvement:** Identify products with lower positive sentiment, signaling potential issues that marketing or product teams should investigate.
+            * **Comparative View:** Understand how products stack up against each other in terms of customer satisfaction.
+            """)
+        else:
+            st.info("No sufficient data to show product-wise sentiment breakdown for current filters.")
+
 
     # --- Individual Review Analysis ---
     st.markdown("---")
@@ -217,7 +259,7 @@ else:
             st.warning("Please enter some text to analyze. Don't leave it blank!")
 
     st.markdown("---")
-    st.info("💡 Pro Tip: Filter the dataset using the sidebar to explore specific sentiment groups!")
+    st.info("💡 Pro Tip: Use the filters in the sidebar to narrow down your analysis to specific products or sentiment types!")
 
     # Optional: Display Raw Data Table
     if st.checkbox("Show Raw Data Table (Filtered)"):
