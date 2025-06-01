@@ -5,3 +5,4 @@ nltk
 textblob
 matplotlib
 seaborn
+Pillow # Ensure Pillow is explicitly listed, though it's often a dependency of other libraries

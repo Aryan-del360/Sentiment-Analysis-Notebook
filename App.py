@@ -6,6 +6,13 @@ import seaborn as sns
 from textblob import TextBlob
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 import nltk # Ensure nltk is imported
+from PIL import Image # NEW: Import Image from Pillow
+
+# NEW: Increase Pillow's maximum image pixel limit to avoid DecompressionBombError
+# Setting to None disables the limit, which is safe for internally generated plots.
+# If you prefer a specific high limit, you can set a large integer (e.g., 400_000_000)
+Image.MAX_IMAGE_PIXELS = None
+
 
 # --- Configuration & Setup (MUST be the absolute first Streamlit command) ---
 st.set_page_config(
