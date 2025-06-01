@@ -13,12 +13,6 @@ from PIL import Image # NEW: Import Image from Pillow
 # This must be done before any image processing (like plotting) occurs.
 Image.MAX_IMAGE_PIXELS = None
 
-# NEW: Configure matplotlib fonts to suppress UserWarnings about missing glyphs
-plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'Liberation Sans']
-plt.rcParams['font.monospace'] = ['DejaVu Sans Mono', 'Courier New', 'Liberation Mono']
-plt.rcParams['font.serif'] = ['DejaVu Serif', 'Times New Roman', 'Liberation Serif']
-
-
 # --- Configuration & Setup (MUST be the absolute first Streamlit command) ---
 st.set_page_config(
     page_title="Product Sentiment Dashboard 🛍️",
@@ -26,6 +20,12 @@ st.set_page_config(
     layout="wide", # Use wide layout for more space
     initial_sidebar_state="expanded"
 )
+
+# NEW: Configure matplotlib fonts to suppress UserWarnings about missing glyphs
+plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'Liberation Sans']
+plt.rcParams['font.monospace'] = ['DejaVu Sans Mono', 'Courier New', 'Liberation Mono']
+plt.rcParams['font.serif'] = ['DejaVu Serif', 'Times New Roman', 'Liberation Serif']
+
 
 # --- NLTK Data Download (Cached to run once per deployment) ---
 @st.cache_resource
@@ -232,11 +232,22 @@ with tab3:
         # Filter out products with 0 positive reviews for clearer visualization
         product_positive_percentage = product_positive_percentage[product_positive_percentage > 0].sort_values(ascending=False)
 
+        # NEW: Slider to select top N products
         if not product_positive_percentage.empty:
-            fig_prod, ax_prod = plt.subplots(figsize=(10, max(6, len(product_positive_percentage) * 0.4))) # Dynamic height
+            max_products = len(product_positive_percentage)
+            num_products_to_show = st.slider(
+                "Show Top N Products:",
+                min_value=5,
+                max_value=min(20, max_products), # Limit max to 20 for reasonable plot size, or total products if less than 20
+                value=min(10, max_products),
+                step=1
+            )
+            product_positive_percentage_display = product_positive_percentage.head(num_products_to_show)
+
+            fig_prod, ax_prod = plt.subplots(figsize=(10, max(6, len(product_positive_percentage_display) * 0.4))) # Dynamic height
             # NEW: Add hue and legend=False to suppress Seaborn FutureWarning
-            sns.barplot(x=product_positive_percentage.values, y=product_positive_percentage.index, ax=ax_prod, palette='viridis', hue=product_positive_percentage.index, legend=False)
-            ax_prod.set_title('Top Products by Positive Sentiment (VADER)', fontsize=14)
+            sns.barplot(x=product_positive_percentage_display.values, y=product_positive_percentage_display.index, ax=ax_prod, palette='viridis', hue=product_positive_percentage_display.index, legend=False)
+            ax_prod.set_title(f'Top {num_products_to_show} Products by Positive Sentiment (VADER)', fontsize=14)
             ax_prod.set_xlabel('% Positive Reviews')
             ax_prod.set_ylabel('Product Name')
             plt.tight_layout() # Adjust layout to prevent labels overlapping
